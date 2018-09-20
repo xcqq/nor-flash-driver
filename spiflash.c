@@ -10,10 +10,14 @@
 #include <linux/spi/spidev.h>
 #include <linux/genhd.h>
 #include <linux/fs.h>
+#include <linux/device.h>
 
-
-
-
+struct spi_flash_dev
+{
+    request_queue *queue;
+    gendisk disk;
+    spinlock_t *lock;
+};
 
 static void flash_request(request_queue_t *req_q)
 {
@@ -35,19 +39,24 @@ static int spi_device_init(void)
 
 static int flash_open(struct block_device *blk_dev,fmode_t mode)
 {
+    struct spi_flash_dev dev = blk_dev->db_disk->private_data;
     /*todo open*/
     return 0;
 }
 
 static int flash_release(struct gendisk *disk,fmode_t mode)
 {
+    struct spi_flash_dev dev = blk_dev->db_disk->private_data;
+
     /*todo release*/
     return 0
 }
 
 int flash_ioctl (struct block_device *, fmode_t, unsigned, unsigned long)
 {
-    return 0;
+    /*no ioctl command support now*/
+    int ret = -EINVAL;
+    return ret;
 }
 struct block_device_operations flash_fops = {
     .open = flash_open,
@@ -64,16 +73,13 @@ struct spi_driver spi_dev = {
 
 };
 
-struct spi_flash_dev {
-    request_queue *queue;
-    gendisk disk;
-    spinlock_t *lock;
-};
+
+
+struct spi_flash_dev *flash_dev = NULL;
 
 static int block_device_init(void)
 {
     int ret = 0;
-
     /*regist block device*/
     if (register_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash"))
     {
@@ -81,24 +87,29 @@ static int block_device_init(void)
         ret = -EIO;
         goto err;
     }
-
+    flash_dev = devm_kmalloc(sizeof(struct spi_flash_dev), GFP_KERNEL);
     /*regist queue*/
-    dev->queue = blk_register_queue(flash_request, dev->lock);
-    if(!dev->queue)
+    flash_dev->queue = blk_register_queue(flash_request, flash_dev->lock);
+    if (!flash_dev->queue)
         goto err;
-    blk_queue_max_hw_sectors(dev->queue, 255);
-    blk_queue_logical_block_size(dev->queue, 512);
-    
+    blk_queue_max_hw_sectors(flash_dev->queue, 255);
+    blk_queue_logical_block_size(flash_dev->queue, 512);
+
     /*init diskgen*/
-    dev->disk->major = BLOCK_EXT_MAJOR;
-    dev->disk->first_minor = 0;
-    dev->disk->fops = flash_fops;
-    dev->disk->queue = dev->queue;
+    flash_dev->disk->major = BLOCK_EXT_MAJOR;
+    flash_dev->disk->first_minor = 0;
+    flash_dev->disk->fops = flash_fops;
+    flash_dev->disk->queue = flash_dev->queue;
     /*temp set to 512*/
-    set_capacity(dev->disk, 512);
-    add_disk(dev->disk);
+    set_capacity(flash_dev->disk, 512);
+    add_disk(flash_dev->disk);
     return 0;
 err:
+    if (flash_dev->disk)
+        put_disk(flash_dev->disk);
+    if (flash_dev->queue)
+        blk_cleanup_queue(flash_dev->queue);
+    unregister_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash");
     return ret;
 }
 
@@ -113,9 +124,13 @@ err:
     return ret;
 }
 
-static int spi_nor_flash_exit()
+static void spi_nor_flash_exit(void)
 {
-    return 0;
+    if (flash_dev->disk)
+        put_disk(flash_dev->disk);
+    if (flash_dev->queue)
+        blk_cleanup_queue(flash_dev->queue);
+    unregister_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash");
 }
 
 module_init(spi_nor_flash_init);
