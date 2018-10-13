@@ -2,13 +2,11 @@ ifneq ($(KERNELRELEASE),)
 obj-m := spiflash.o
 else
 KSRC := ~/sourcecode/allwinner/nanopi-wolf/mainline/kernel
-ARCH := 
-CROSS_COMPILE := 
+ARCH := arm
+CROSS_COMPILE := arm-linux-gnueabihf-
 
-all: modules
-
-modules:
-	$(MAKE) -C $(KSRC) M=$(shell pwd) modules
+all: 
+	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KSRC) M=$(shell pwd) modules
 
 .PHONY: clean
 clean:
