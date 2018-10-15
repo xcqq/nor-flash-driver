@@ -2,7 +2,6 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/errno.h>
-#include <linux/init.h>
 #include <linux/major.h>
 #include <linux/blkdev.h>
 #include <linux/printk.h>
@@ -12,11 +11,14 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 
+/* enable debug to print debug log*/
+#define DEBUG
+
 struct spi_flash_dev
 {
     struct request_queue *queue;
     struct gendisk disk;
-    spinlock_t *lock;
+    spinlock_t *lock;  
 };
 
 static void flash_request(struct request_queue *req_q)
@@ -69,15 +71,18 @@ static int block_device_init(void)
 {
     int ret = 0;
     /*regist block device*/
-    if (register_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash"))
+    pr_info("Init block device");
+    
+    if (register_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash"))
     {
-
+        pr_err("register blkdev fail");
         ret = -EIO;
         goto err_blk;
     }
     flash_dev = kzalloc(sizeof(struct spi_flash_dev), GFP_KERNEL);
     if(flash_dev == NULL)
     {
+        pr_err("alloc mem fail");
         ret = -ENOMEM;
         goto err_alloc;
     }
@@ -85,6 +90,7 @@ static int block_device_init(void)
     flash_dev->queue = blk_init_queue(flash_request, flash_dev->lock);
     if (!flash_dev->queue)
     {
+        pr_err("queue init fail");
         goto err_queue;
         ret = -EIO;
     }
@@ -109,7 +115,7 @@ err_queue:
 err_alloc:
     kfree(flash_dev);
 err_blk:
-    unregister_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash");
+    unregister_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash");
     return ret;
 }
 
@@ -130,7 +136,7 @@ static void spi_nor_flash_exit(void)
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
     kfree(flash_dev);
-    unregister_blkdev(BLOCK_EXT_MAJOR, "my_spi_flash");
+    unregister_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash");
 }
 
 module_init(spi_nor_flash_init);
