@@ -14,6 +14,9 @@
 /* enable debug to print debug log*/
 #define DEBUG
 
+/*set to zero to get a major device no dynamically */ 
+#define MAJOR_DEVICE_NO 0
+
 struct spi_flash_dev
 {
     struct request_queue *queue;
@@ -66,14 +69,14 @@ struct block_device_operations flash_fops = {
 
 
 struct spi_flash_dev *flash_dev = NULL;
-
+int major = 0;
 static int block_device_init(void)
 {
     int ret = 0;
     /*regist block device*/
     pr_info("Init block device");
-    
-    if (register_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash"))
+    major = register_blkdev(MAJOR_DEVICE_NO, "my_spi_flash");
+    if(major <= 0)
     {
         pr_err("register blkdev fail");
         ret = -EIO;
@@ -98,7 +101,7 @@ static int block_device_init(void)
     blk_queue_logical_block_size(flash_dev->queue, 512);
 
     /*init diskgen*/
-    flash_dev->disk.major = BLOCK_EXT_MAJOR;
+    flash_dev->disk.major = major;
     flash_dev->disk.first_minor = 0;
     flash_dev->disk.fops = &flash_fops;
     flash_dev->disk.queue = flash_dev->queue;
@@ -115,7 +118,7 @@ err_queue:
 err_alloc:
     kfree(flash_dev);
 err_blk:
-    unregister_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash");
+    unregister_blkdev(major, "my_spi_flash");
     return ret;
 }
 
@@ -136,7 +139,7 @@ static void spi_nor_flash_exit(void)
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
     kfree(flash_dev);
-    unregister_blkdev(MTD_BLOCK_MAJOR, "my_spi_flash");
+    unregister_blkdev(major, "my_spi_flash");
 }
 
 module_init(spi_nor_flash_init);
