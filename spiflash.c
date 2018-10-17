@@ -16,12 +16,13 @@
 
 /*set to zero to get a major device no dynamically */ 
 #define MAJOR_DEVICE_NO 0
-
+/*max partitions of block device*/
+#define MINOR_DEVICE 32
 struct spi_flash_dev
 {
     struct request_queue *queue;
-    struct gendisk disk;
-    spinlock_t *lock;  
+    struct gendisk *disk;
+    spinlock_t lock;  
 };
 
 static void flash_request(struct request_queue *req_q)
@@ -90,8 +91,9 @@ static int block_device_init(void)
         goto err_alloc;
     }
     /*regist queue*/
-    flash_dev->queue = blk_init_queue(flash_request, flash_dev->lock);
-    if (!flash_dev->queue)
+    spin_lock_init(&flash_dev->lock);
+    flash_dev->queue = blk_init_queue(flash_request, &flash_dev->lock);
+    if (flash_dev->queue == NULL)
     {
         pr_err("queue init fail");
         goto err_queue;
@@ -101,17 +103,21 @@ static int block_device_init(void)
     blk_queue_logical_block_size(flash_dev->queue, 512);
 
     /*init diskgen*/
-    flash_dev->disk.major = major;
-    flash_dev->disk.first_minor = 0;
-    flash_dev->disk.fops = &flash_fops;
-    flash_dev->disk.queue = flash_dev->queue;
+    flash_dev->disk = alloc_disk(MINOR_DEVICE);
+    flash_dev->disk->major = major;
+    flash_dev->disk->first_minor = 0; 
+    flash_dev->disk->fops = &flash_fops;
+    flash_dev->disk->queue = flash_dev->queue;
+    snprintf(flash_dev->disk->disk_name, 32, "spiblk0");
     /*temp set to 512*/
-    set_capacity(&flash_dev->disk, 512);
-    add_disk(&flash_dev->disk);
+    set_capacity(flash_dev->disk, 512);
+    pr_info("add_disk major: %d, name:%s", flash_dev->disk->major, flash_dev->disk->disk_name);
+    add_disk(flash_dev->disk);
+
     return 0;
 
 err_disk:
-    put_disk(&flash_dev->disk);
+    put_disk(flash_dev->disk);
 err_queue:
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
@@ -135,7 +141,7 @@ err:
 
 static void spi_nor_flash_exit(void)
 {
-    put_disk(&flash_dev->disk);
+    put_disk(flash_dev->disk);
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
     kfree(flash_dev);
