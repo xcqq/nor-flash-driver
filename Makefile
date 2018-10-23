@@ -3,7 +3,7 @@ obj-m := spiflash.o
 else
 KSRC := ~/sourcecode/allwinner/nanopi-wolf/mainline/kernel
 ARCH := arm
-CROSS_COMPILE := arm-linux-gnueabihf-
+CROSS_COMPILE := arm-linux-gnueabi-
 
 all: 
 	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KSRC) M=$(shell pwd) modules
