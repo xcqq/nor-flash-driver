@@ -6,7 +6,7 @@
 #include <linux/blkdev.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
-#include <linux/spi/spidev.h>
+#include <linux/spi/spi.h>
 #include <linux/genhd.h>
 #include <linux/fs.h>
 #include <linux/device.h>
@@ -22,7 +22,9 @@ struct spi_flash_dev
 {
     struct request_queue *queue;
     struct gendisk *disk;
-    spinlock_t lock;  
+    spinlock_t lock;
+    spinlock_t spi_lock;
+    spi_device *spi;
 };
 
 static void flash_request(struct request_queue *req_q)
@@ -35,12 +37,6 @@ static void flash_request(struct request_queue *req_q)
         /*spi flash transfer here*/
         blk_start_request(req);
     }
-}
-
-static int spi_device_init(void)
-{
-    /*init spi device*/
-    return 0;
 }
 
 static int flash_open(struct block_device *blk_dev,fmode_t mode)
@@ -147,6 +143,35 @@ static void spi_nor_flash_exit(void)
     kfree(flash_dev);
     unregister_blkdev(major, "my_spi_flash");
 }
+
+static int spi_device_probe(struct spi_device *dev)
+{
+    /*init spi device*/
+    flash_dev->spi = dev;
+    spin_lock_init(flash_dev->spi_lock);
+    dev_set_drvdata(flash_dev->spi->dev, flash_dev);
+    return 0;
+}
+
+static int spi_device_remove(struct spi_device *dev)
+{
+    /*remove spi device*/
+
+}
+
+static const struct of_device_id spidev_ids[] = {
+    {.compatible, "spiflash", }
+}
+
+static struct spi_driver spi_flash_driver = {
+    .driver = {
+        .name = "spiflash",
+        .owner = THIS_MODULE,
+        .of_match_table = of_match_ptr(spidev_ids),
+    },
+    .probe = spi_device_probe,
+    .remove = spi_device_remove,
+};
 
 module_init(spi_nor_flash_init);
 module_exit(spi_nor_flash_exit);
