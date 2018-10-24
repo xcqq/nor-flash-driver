@@ -10,6 +10,7 @@
 #include <linux/genhd.h>
 #include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/of.h>
 
 /* enable debug to print debug log*/
 #define DEBUG
@@ -24,7 +25,7 @@ struct spi_flash_dev
     struct gendisk *disk;
     spinlock_t lock;
     spinlock_t spi_lock;
-    spi_device *spi;
+    struct spi_device *spi;
 };
 
 static void flash_request(struct request_queue *req_q)
@@ -148,8 +149,8 @@ static int spi_device_probe(struct spi_device *dev)
 {
     /*init spi device*/
     flash_dev->spi = dev;
-    spin_lock_init(flash_dev->spi_lock);
-    dev_set_drvdata(flash_dev->spi->dev, flash_dev);
+    spin_lock_init(&flash_dev->spi_lock);
+    dev_set_drvdata(&flash_dev->spi->dev, flash_dev);
     return 0;
 }
 
@@ -160,8 +161,8 @@ static int spi_device_remove(struct spi_device *dev)
 }
 
 static const struct of_device_id spidev_ids[] = {
-    {.compatible, "spiflash", }
-}
+    {.compatible = "spiflash", }
+};
 
 static struct spi_driver spi_flash_driver = {
     .driver = {
