@@ -13,7 +13,7 @@
 #include <linux/of.h>
 
 /* enable debug to print debug log*/
-#define DEBUG
+ #define DEBUG
 
 /*set to zero to get a major device no dynamically */ 
 #define MAJOR_DEVICE_NO 0
@@ -28,12 +28,42 @@ struct spi_flash_dev
     struct spi_device *spi;
 };
 
+static ssize_t flash_spi_sync(struct spi_flash_dev dev,struct spi_message message)
+{
+
+}
+
+static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buffer, unsigned long len,unsigned int dir)
+{
+
+}
+
+/*it's such a simple driver, so we just tranvers request*/
+static int flash_transfer_req(struct spi_flash_dev *dev,struct request *req)
+{
+    struct bio_vec bio_v;
+    struct req_iterator iter;
+
+    /*do data transfer to flash*/
+    rq_for_each_segment(bio_v,req,iter) {
+        char *buffer = kmap_atomic(bio_v.bv_page);
+        unsigned long offset = bio_v.bv_offset;
+        unsigned long len = bio_v.bv_len;
+        sector_t sector = iter.iter.bi_sector;
+        flash_transfer(dev, sector, buffer + offset, len, bio_data_dir(iter.bio));
+        kunmap(buffer);
+    }
+    return 0;
+}
+
 static void flash_request(struct request_queue *req_q)
 {
     /*todo transfer to spi flash*/
     struct request *req;
-    while((req=blk_peek_request(req_q))!= NULL)
+    pr_debug("request start");
+    while ((req = blk_peek_request(req_q)) != NULL)
     {
+        flash_transfer_req(req->rq_disk->private_data, req);
         /*need filter fs request*/
         /*spi flash transfer here*/
         blk_start_request(req);
@@ -44,6 +74,8 @@ static int flash_open(struct block_device *blk_dev,fmode_t mode)
 {
     struct spi_flash_dev *dev = blk_dev->bd_disk->private_data;
     /*todo open*/
+    /*get flash id when open, just for test*/
+
     return 0;
 }
 
@@ -72,7 +104,7 @@ static int block_device_init(void)
 {
     int ret = 0;
     /*regist block device*/
-    pr_info("Init block device");
+    pr_debug("Init block device");
     major = register_blkdev(MAJOR_DEVICE_NO, "my_spi_flash");
     if(major <= 0)
     {
@@ -80,13 +112,7 @@ static int block_device_init(void)
         ret = -EIO;
         goto err_blk;
     }
-    flash_dev = kzalloc(sizeof(struct spi_flash_dev), GFP_KERNEL);
-    if(flash_dev == NULL)
-    {
-        pr_err("alloc mem fail");
-        ret = -ENOMEM;
-        goto err_alloc;
-    }
+    pr_debug("register blkdev major: %d", major);
     /*regist queue*/
     spin_lock_init(&flash_dev->lock);
     flash_dev->queue = blk_init_queue(flash_request, &flash_dev->lock);
@@ -96,6 +122,7 @@ static int block_device_init(void)
         goto err_queue;
         ret = -EIO;
     }
+    pr_debug("queue init ok");
     blk_queue_max_hw_sectors(flash_dev->queue, 255);
     blk_queue_logical_block_size(flash_dev->queue, 512);
 
@@ -118,46 +145,51 @@ err_disk:
 err_queue:
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
-err_alloc:
-    kfree(flash_dev);
 err_blk:
     unregister_blkdev(major, "my_spi_flash");
     return ret;
 }
 
-static int __init spi_nor_flash_init(void)
-{
-    int ret = 0;
-    if((ret = block_device_init()) != 0 )
-        goto err;
-    return 0;
-
-err:
-    return ret;
-}
-
-static void spi_nor_flash_exit(void)
+static void block_device_remove(void)
 {
     put_disk(flash_dev->disk);
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
-    kfree(flash_dev);
     unregister_blkdev(major, "my_spi_flash");
 }
 
 static int spi_device_probe(struct spi_device *dev)
 {
     /*init spi device*/
+    int ret = 0;
+    pr_info("spi device probe enter");
+    flash_dev = kzalloc(sizeof(struct spi_flash_dev), GFP_KERNEL);
+    if(flash_dev == NULL)
+    {
+        pr_err("alloc mem fail");
+        ret = -ENOMEM;
+        goto err_spi;
+    }
     flash_dev->spi = dev;
     spin_lock_init(&flash_dev->spi_lock);
     dev_set_drvdata(&flash_dev->spi->dev, flash_dev);
+    ret = block_device_init();
+    if (ret < 0)
+    {
+        pr_err("block device init failed");
+        goto err_spi;
+    }
+err_spi:
+    block_device_remove();
+    kfree(flash_dev);
     return 0;
 }
 
 static int spi_device_remove(struct spi_device *dev)
 {
     /*remove spi device*/
-
+    block_device_remove();
+    kfree(flash_dev);
 }
 
 static const struct of_device_id spidev_ids[] = {
@@ -174,5 +206,6 @@ static struct spi_driver spi_flash_driver = {
     .remove = spi_device_remove,
 };
 
-module_init(spi_nor_flash_init);
-module_exit(spi_nor_flash_exit);
+
+module_spi_driver(spi_flash_driver);
+MODULE_LICENSE("GPL");
