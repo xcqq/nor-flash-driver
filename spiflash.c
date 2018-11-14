@@ -19,6 +19,8 @@
 #define MAJOR_DEVICE_NO 0
 /*max partitions of block device*/
 #define MINOR_DEVICE 32
+/*the length of spi tx&rx buffer*/
+#define SPI_BUFF_LEN 1024
 struct spi_flash_dev
 {
     struct request_queue *queue;
@@ -26,6 +28,8 @@ struct spi_flash_dev
     spinlock_t lock;
     spinlock_t spi_lock;
     struct spi_device *spi;
+    char *tx_buf;
+    char *rx_buf;
 };
 
 static ssize_t flash_spi_sync(struct spi_flash_dev dev,struct spi_message message)
@@ -35,7 +39,7 @@ static ssize_t flash_spi_sync(struct spi_flash_dev dev,struct spi_message messag
 
 static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buffer, unsigned long len,unsigned int dir)
 {
-
+    /* todo spi message transfer*/
 }
 
 /*it's such a simple driver, so we just tranvers request*/
@@ -51,7 +55,7 @@ static int flash_transfer_req(struct spi_flash_dev *dev,struct request *req)
         unsigned long len = bio_v.bv_len;
         sector_t sector = iter.iter.bi_sector;
         flash_transfer(dev, sector, buffer + offset, len, bio_data_dir(iter.bio));
-        kunmap(buffer);
+        kunmap(bio_v.bv_page);
     }
     return 0;
 }
@@ -168,27 +172,55 @@ static int spi_device_probe(struct spi_device *dev)
     {
         pr_err("alloc mem fail");
         ret = -ENOMEM;
-        goto err_spi;
+        goto cleanup;
+    }
+    flash_dev->tx_buf = kmalloc(SPI_BUFF_LEN, GFP_KERNEL);
+    flash_dev->rx_buf = kmalloc(SPI_BUFF_LEN, GFP_KERNEL);
+    if(!(flash_dev->tx_buf&&flash_dev->rx_buf))
+    {
+        ret = -ENOMEM;
+        goto cleanup;
     }
     flash_dev->spi = dev;
     spin_lock_init(&flash_dev->spi_lock);
     dev_set_drvdata(&flash_dev->spi->dev, flash_dev);
+    /*get flash id*/
+    flash_dev->tx_buf[0] = 0x90;
+    flash_dev->tx_buf[1] = 0x00;
+    flash_dev->tx_buf[2] = 0x00;
+    flash_dev->tx_buf[3] = 0x00;
+    if(spi_write_then_read(flash_dev->spi, flash_dev->tx_buf, 4, flash_dev->rx_buf, SPI_BUFF_LEN)<0)
+    {
+        ret = -EIO;
+        goto cleanup;
+    }
+    /*todo flash id judgement*/
+
     ret = block_device_init();
     if (ret < 0)
     {
         pr_err("block device init failed");
-        goto err_spi;
+        goto cleanup;
     }
-err_spi:
-    block_device_remove();
-    kfree(flash_dev);
     return 0;
+cleanup:
+    block_device_remove();
+    if(flash_dev->tx_buf)
+        kfree(flash_dev->tx_buf);
+    if(flash_dev->rx_buf)
+        kfree(flash_dev->rx_buf);
+    kfree(flash_dev);
+    return ret;
 }
 
 static int spi_device_remove(struct spi_device *dev)
 {
     /*remove spi device*/
     block_device_remove();
+    if(flash_dev->tx_buf)
+        kfree(flash_dev->tx_buf);
+    if(flash_dev->rx_buf)
+        kfree(flash_dev->rx_buf);
     kfree(flash_dev);
 }
 
