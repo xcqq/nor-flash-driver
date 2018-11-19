@@ -21,6 +21,9 @@
 #define MINOR_DEVICE 32
 /*the length of spi tx&rx buffer*/
 #define SPI_BUFF_LEN 1024
+/*spi flash command*/
+#define FLASH_PROGRAM   0x02
+#define FLASH_READ      0x03
 struct spi_flash_dev
 {
     struct request_queue *queue;
@@ -32,14 +35,46 @@ struct spi_flash_dev
     char *rx_buf;
 };
 
-static ssize_t flash_spi_sync(struct spi_flash_dev dev,struct spi_message message)
-{
-
-}
+/*not need if we just use spi_write or spi_read function*/
+// static ssize_t flash_spi_sync(struct spi_flash_dev dev,struct spi_message message)
+// {
+    
+// }
 
 static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buffer, unsigned long len,unsigned int dir)
 {
     /* todo spi message transfer*/
+    unsigned long flash_addr;
+    unsigned int i, cnt,len_left;
+    /*write operation*/
+    if (dir == 0)
+    {
+        /*fill in spi buffer*/
+        spi_flash_dev->tx_buf[0] = FLASH_PROGRAM;
+        cnt = len / 256 + 1;
+        len_left = len;
+        for (i = 0; i < len; i++)
+        {
+            flash_addr = (sector + i) * 256;
+            spi_flash_dev->tx_buf[1] = flash_addr >> 16;
+            spi_flash_dev->tx_buf[2] = flash_addr >> 8;
+            spi_flash_dev->tx_buf[3] = flash_addr;
+            if (len_left >= 256)
+            {
+                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * 256, 256);
+                len_left -= 256;
+            }
+            else
+            {
+                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * 256, len_left);
+            }
+            spi_write(spi_flash_dev->spi, spi_flash_dev->tx_buf, len + 4);
+        }
+    }
+    /*read operation*/
+    else
+    {
+    }
 }
 
 /*it's such a simple driver, so we just tranvers request*/
