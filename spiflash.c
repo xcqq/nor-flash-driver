@@ -22,7 +22,7 @@
 /*the length of spi tx&rx buffer*/
 /*10 byte is for spi command*/
 #define SPI_DATA_LEN 1024
-#define SPI_BUFF_LEN SPI_BUFF_LEN+10
+#define SPI_BUFF_LEN SPI_DATA_LEN+10
 /*spi flash command*/
 #define FLASH_PROGRAM   0x02
 #define FLASH_READ      0x03
@@ -52,25 +52,25 @@ static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buff
     if (dir == WRITE)
     {
         /*fill in spi buffer*/
-        spi_flash_dev->tx_buf[0] = FLASH_PROGRAM;
+        dev->tx_buf[0] = FLASH_PROGRAM;
         cnt = len / SPI_DATA_LEN + 1;
         len_left = len;
         for (i = 0; i < len; i++)
         {
             flash_addr = (sector + i * SPI_DATA_LEN / 256) * 256;
-            spi_flash_dev->tx_buf[1] = flash_addr >> 16;
-            spi_flash_dev->tx_buf[2] = flash_addr >> 8;
-            spi_flash_dev->tx_buf[3] = flash_addr;
+            dev->tx_buf[1] = flash_addr >> 16;
+            dev->tx_buf[2] = flash_addr >> 8;
+            dev->tx_buf[3] = flash_addr;
             if (len_left >= 256)
             {
-                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * SPI_DATA_LEN, SPI_DATA_LEN);
+                memcpy(&dev->tx_buf[4], buffer + i * SPI_DATA_LEN, SPI_DATA_LEN);
                 len_left -= SPI_DATA_LEN;
             }
             else
             {
-                memcpy(&spi_flash_dev->tx_buf[4], buffer + i *SPI_DATA_LEN, len_left);
+                memcpy(&dev->tx_buf[4], buffer + i *SPI_DATA_LEN, len_left);
             }
-            spi_write(spi_flash_dev->spi, spi_flash_dev->tx_buf, len + 4);
+            spi_write(dev->spi, dev->tx_buf, len + 4);
         }
     }
     /*read operation*/
@@ -96,7 +96,7 @@ static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buff
             else
             {
                 spi_write_then_read(dev->spi, dev->tx_buf, 4, dev->rx_buf, len_left);
-                memcpy(buffer + buffer + i * SPI_DATA_LEN, dev->rx_buf, len_left);
+                memcpy(buffer + i * SPI_DATA_LEN, dev->rx_buf, len_left);
             }
         }
     }
