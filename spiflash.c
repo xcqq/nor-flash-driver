@@ -53,22 +53,22 @@ static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buff
     {
         /*fill in spi buffer*/
         spi_flash_dev->tx_buf[0] = FLASH_PROGRAM;
-        cnt = len / 256 + 1;
+        cnt = len / SPI_DATA_LEN + 1;
         len_left = len;
         for (i = 0; i < len; i++)
         {
-            flash_addr = (sector + i) * 256;
+            flash_addr = (sector + i * SPI_DATA_LEN / 256) * 256;
             spi_flash_dev->tx_buf[1] = flash_addr >> 16;
             spi_flash_dev->tx_buf[2] = flash_addr >> 8;
             spi_flash_dev->tx_buf[3] = flash_addr;
             if (len_left >= 256)
             {
-                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * 256, 256);
-                len_left -= 256;
+                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * SPI_DATA_LEN, SPI_DATA_LEN);
+                len_left -= SPI_DATA_LEN;
             }
             else
             {
-                memcpy(&spi_flash_dev->tx_buf[4], buffer + i * 256, len_left);
+                memcpy(&spi_flash_dev->tx_buf[4], buffer + i *SPI_DATA_LEN, len_left);
             }
             spi_write(spi_flash_dev->spi, spi_flash_dev->tx_buf, len + 4);
         }
