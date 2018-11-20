@@ -20,7 +20,9 @@
 /*max partitions of block device*/
 #define MINOR_DEVICE 32
 /*the length of spi tx&rx buffer*/
-#define SPI_BUFF_LEN 1024
+/*10 byte is for spi command*/
+#define SPI_DATA_LEN 1024
+#define SPI_BUFF_LEN SPI_BUFF_LEN+10
 /*spi flash command*/
 #define FLASH_PROGRAM   0x02
 #define FLASH_READ      0x03
@@ -47,7 +49,7 @@ static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buff
     unsigned long flash_addr;
     unsigned int i, cnt,len_left;
     /*write operation*/
-    if (dir == 0)
+    if (dir == WRITE)
     {
         /*fill in spi buffer*/
         spi_flash_dev->tx_buf[0] = FLASH_PROGRAM;
@@ -74,6 +76,29 @@ static void flash_transfer(struct spi_flash_dev *dev,sector_t sector, char *buff
     /*read operation*/
     else
     {
+        dev->tx_buf[0] = FLASH_READ;
+        /*limit transfer bytes because of tx/rx buffer length*/
+        /*rest of spi buffer is used for spi cmd and addr*/
+        cnt = len / SPI_DATA_LEN + 1;
+        len_left = len;
+        for (i = 0; i < len;i++)
+        {
+            flash_addr = (sector + i * SPI_DATA_LEN / 256) * 256;
+            dev->tx_buf[1] = flash_addr >> 16;
+            dev->tx_buf[2] = flash_addr >> 8;
+            dev->tx_buf[3] = flash_addr;
+            if(len_left >= SPI_DATA_LEN)
+            {
+                spi_write_then_read(dev->spi, dev->tx_buf, 4, dev->rx_buf, SPI_DATA_LEN);
+                memcpy(buffer + i * SPI_DATA_LEN, dev->rx_buf, SPI_DATA_LEN);
+                len_left -= SPI_DATA_LEN;
+            }
+            else
+            {
+                spi_write_then_read(dev->spi, dev->tx_buf, 4, dev->rx_buf, len_left);
+                memcpy(buffer + buffer + i * SPI_DATA_LEN, dev->rx_buf, len_left);
+            }
+        }
     }
 }
 
