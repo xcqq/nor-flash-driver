@@ -124,7 +124,7 @@ static void flash_request(struct request_queue *req_q)
 {
     /*todo transfer to spi flash*/
     struct request *req;
-    pr_debug("request start");
+    dev_dbg(req_q->dev, "request start");
     while ((req = blk_peek_request(req_q)) != NULL)
     {
         flash_transfer_req(req->rq_disk->private_data, req);
@@ -164,11 +164,11 @@ struct block_device_operations flash_fops = {
 
 struct spi_flash_dev *flash_dev = NULL;
 int major = 0;
-static int block_device_init(void)
+static int block_device_init(struct spi_flash_dev *dev)
 {
     int ret = 0;
     /*regist block device*/
-    pr_debug("Init block device");
+    dev_dbg(&dev->spi->dev, "Init block device");
     major = register_blkdev(MAJOR_DEVICE_NO, "my_spi_flash");
     if(major <= 0)
     {
@@ -176,7 +176,7 @@ static int block_device_init(void)
         ret = -EIO;
         goto err_blk;
     }
-    pr_debug("register blkdev major: %d", major);
+    dev_dbg(&dev->spi->dev, "register blkdev major: %d", major);
     /*regist queue*/
     spin_lock_init(&flash_dev->lock);
     flash_dev->queue = blk_init_queue(flash_request, &flash_dev->lock);
@@ -186,7 +186,7 @@ static int block_device_init(void)
         goto err_queue;
         ret = -EIO;
     }
-    pr_debug("queue init ok");
+    dev_dbg(&dev->spi->dev, "queue init ok");
     blk_queue_max_hw_sectors(flash_dev->queue, 255);
     blk_queue_logical_block_size(flash_dev->queue, 512);
 
@@ -199,7 +199,7 @@ static int block_device_init(void)
     snprintf(flash_dev->disk->disk_name, 32, "spiblk0");
     /*temp set to 512*/
     set_capacity(flash_dev->disk, 512);
-    pr_info("add_disk major: %d, name:%s", flash_dev->disk->major, flash_dev->disk->disk_name);
+    dev_info(&dev->spi->dev, "add_disk major: %d, name:%s", flash_dev->disk->major, flash_dev->disk->disk_name);
     add_disk(flash_dev->disk);
 
     return 0;
@@ -226,11 +226,11 @@ static int spi_device_probe(struct spi_device *dev)
 {
     /*init spi device*/
     int ret = 0;
-    pr_info("spi device probe enter");
+    dev_dbg(&dev->dev, "spi device probe enter");
     flash_dev = kzalloc(sizeof(struct spi_flash_dev), GFP_KERNEL);
     if(flash_dev == NULL)
     {
-        pr_err("alloc mem fail");
+        dev_err(&dev->dev, "alloc mem fail");
         ret = -ENOMEM;
         goto cleanup;
     }
@@ -256,10 +256,10 @@ static int spi_device_probe(struct spi_device *dev)
     }
     /*todo flash id judgement*/
 
-    ret = block_device_init();
+    ret = block_device_init(flash_dev);
     if (ret < 0)
     {
-        pr_err("block device init failed");
+        dev_err(&dev->dev, "block device init failed");
         goto cleanup;
     }
     return 0;
