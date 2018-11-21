@@ -13,7 +13,7 @@
 #include <linux/of.h>
 
 /* enable debug to print debug log*/
- #define DEBUG
+ #define DEBUG 1
 
 /*set to zero to get a major device no dynamically */ 
 #define MAJOR_DEVICE_NO 0
@@ -249,12 +249,14 @@ static int spi_device_probe(struct spi_device *dev)
     flash_dev->tx_buf[1] = 0x00;
     flash_dev->tx_buf[2] = 0x00;
     flash_dev->tx_buf[3] = 0x00;
-    if(spi_write_then_read(flash_dev->spi, flash_dev->tx_buf, 4, flash_dev->rx_buf, SPI_BUFF_LEN)<0)
+    if(spi_write_then_read(flash_dev->spi, flash_dev->tx_buf, 4, flash_dev->rx_buf, 2)<0)
     {
+        dev_err(&dev->dev, "get flash id fail");
         ret = -EIO;
         goto cleanup;
     }
     /*todo flash id judgement*/
+    dev_dbg(&dev->dev, "get flash id success: Manufacturer ID: %X, Device ID: %X", flash->rx_buf[0], flash->rx_buf[1]);
 
     ret = block_device_init(flash_dev);
     if (ret < 0)
@@ -264,6 +266,7 @@ static int spi_device_probe(struct spi_device *dev)
     }
     return 0;
 cleanup:
+    dev_err(&dev->dev, "Device probe fail,exiting!!!!");
     block_device_remove();
     if(flash_dev->tx_buf)
         kfree(flash_dev->tx_buf);
