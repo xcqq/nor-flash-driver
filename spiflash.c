@@ -256,7 +256,14 @@ static int spi_device_probe(struct spi_device *dev)
         goto cleanup;
     }
     /*todo flash id judgement*/
-    dev_dbg(&dev->dev, "get flash id success: Manufacturer ID: %X, Device ID: %X", flash->rx_buf[0], flash->rx_buf[1]);
+    if((flash_dev->rx_buf[0]==0xEF)&&(flash_dev->rx_buf[1]==0x17))
+        dev_info(&dev->dev, "get flash id success, flash is W25Q128FV");
+    else
+    {
+        dev_info(&dev->dev, "get flash id success: Manufacturer ID: %X, Device ID: %X, flash is not W25Q128FV", flash_dev->rx_buf[0], flash_dev->rx_buf[1]);
+        ret = -EIO;
+        goto cleanup;
+    }
 
     ret = block_device_init(flash_dev);
     if (ret < 0)
