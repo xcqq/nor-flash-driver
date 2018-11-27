@@ -124,9 +124,10 @@ static void flash_request(struct request_queue *req_q)
 {
     /*todo transfer to spi flash*/
     struct request *req;
-    dev_dbg(req_q->dev, "request start");
     while ((req = blk_peek_request(req_q)) != NULL)
     {
+        //dev_info(req->rq_disk->private_data->spi->dev,)
+        pr_info("private_data %lu",req->rq_disk->private_data);
         flash_transfer_req(req->rq_disk->private_data, req);
         /*need filter fs request*/
         /*spi flash transfer here*/
@@ -196,6 +197,7 @@ static int block_device_init(struct spi_flash_dev *dev)
     flash_dev->disk->first_minor = 0; 
     flash_dev->disk->fops = &flash_fops;
     flash_dev->disk->queue = flash_dev->queue;
+    flash_dev->disk->private_data = dev;
     snprintf(flash_dev->disk->disk_name, 32, "spiblk0");
     /*temp set to 512*/
     set_capacity(flash_dev->disk, 512);
@@ -216,7 +218,8 @@ err_blk:
 
 static void block_device_remove(void)
 {
-    put_disk(flash_dev->disk);
+    if(flash_dev->disk)
+        put_disk(flash_dev->disk);
     if (flash_dev->queue)
         blk_cleanup_queue(flash_dev->queue);
     unregister_blkdev(major, "my_spi_flash");
